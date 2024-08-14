@@ -1,0 +1,47 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: anthem-auth
+  cloud:
+    nacos:
+      discovery:
+        server-addr: your-ip-address
+        username: your-username
+        password: your-password
+  datasource:
+    hikari:
+      pool-name: AnthemHikariCP
+      minimum-idle: 10
+      maximum-pool-size: 50
+      auto-commit: true
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      connection-timeout: 30000
+    driver-class-name:  com.mysql.cj.jdbc.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    url: jdbc:mysql://your-ip-address/schema?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=UTC
+    username: your-username
+    password: your-password
+  data:
+    redis:
+      host: your-ip-address
+      port: 6379
+      password: your-password
+      lettuce:
+        pool:
+          max-active: 50
+          max-idle: 20
+          min-idle: 10
+          max-wait: 5000ms
+
+#mybatis-plus配置
+mybatis-plus:
+  mapper-locations: classpath:com/tempest/**/mapper/*Mapper.xml
+  #实体扫描，多个package用逗号或者分号分隔
+  typeAliasesPackage: com.tempest.**.entity
+
+logging:
+  level:
+    org.springframework.security: trace
