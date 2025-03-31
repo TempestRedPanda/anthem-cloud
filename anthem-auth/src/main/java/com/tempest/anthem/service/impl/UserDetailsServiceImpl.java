@@ -8,6 +8,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -19,10 +20,15 @@ import java.util.stream.Stream;
  * @author tempest_red_panda
  * @since 2024-08-15
  */
+@Service
 public class UserDetailsServiceImpl implements UserDetailsService {
 
+    private final IAnthemUserService anthemUserService;
+
     @Autowired
-    private IAnthemUserService anthemUserService;
+    public UserDetailsServiceImpl(IAnthemUserService anthemUserService) {
+        this.anthemUserService = anthemUserService;
+    }
 
     @Override
     public UserDetails loadUserByUsername(String username) {

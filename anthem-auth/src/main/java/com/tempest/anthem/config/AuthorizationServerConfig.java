@@ -5,12 +5,23 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+//import com.tempest.anthem.granter.ExtensionAuthorizationGrantType;
+//import com.tempest.anthem.granter.password.OAuth2PasswordAuthenticationConverter;
+//import com.tempest.anthem.granter.password.OAuth2PasswordAuthenticationProvider;
+import com.tempest.anthem.redis.repository.OAuth2AuthorizationGrantAuthorizationRepository;
+import com.tempest.anthem.redis.repository.OAuth2RegisteredClientRepository;
+import com.tempest.anthem.redis.repository.OAuth2UserConsentRepository;
+import com.tempest.anthem.redis.service.RedisOAuth2AuthorizationConsentService;
+import com.tempest.anthem.redis.service.RedisOAuth2AuthorizationService;
+import com.tempest.anthem.redis.service.RedisRegisteredClientRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -21,17 +32,17 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.core.OAuth2AccessToken;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService;
-import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
-import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -41,6 +52,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
 import java.util.UUID;
 
 @Configuration
@@ -49,25 +61,52 @@ public class AuthorizationServerConfig {
 
     private static final String CUSTOM_CONSENT_PAGE_URI = "/oauth2/consent";
 
+//    // 扩展Provider
+//    private final OAuth2PasswordAuthenticationProvider oAuth2PasswordAuthenticationProvider;
+//    // 扩展Converter
+//    private final OAuth2PasswordAuthenticationConverter oAuth2PasswordAuthenticationConverter;
+
+//    @Autowired
+//    public AuthorizationServerConfig(@Lazy OAuth2PasswordAuthenticationProvider oAuth2PasswordAuthenticationProvider,
+//                                     @Lazy OAuth2PasswordAuthenticationConverter oAuth2PasswordAuthenticationConverter) {
+//        this.oAuth2PasswordAuthenticationProvider = oAuth2PasswordAuthenticationProvider;
+//        this.oAuth2PasswordAuthenticationConverter = oAuth2PasswordAuthenticationConverter;
+//    }
+
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
             throws Exception {
-        OAuth2AuthorizationServerConfiguration.applyDefaultSecurity(http);
-        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-                .oidc(Customizer.withDefaults());
+        OAuth2AuthorizationServerConfigurer authorizationServerConfigurer =
+                OAuth2AuthorizationServerConfigurer.authorizationServer();
+
         http
+                .securityMatcher(authorizationServerConfigurer.getEndpointsMatcher())
+                .with(authorizationServerConfigurer, (authorizationServer) ->
+                        authorizationServer
+                                .oidc(Customizer.withDefaults())	// Enable OpenID Connect 1.0
+                )
+                .authorizeHttpRequests((authorize) ->
+                        authorize
+                                .anyRequest().authenticated()
+                )
                 // Redirect to the login page when not authenticated from the
                 // authorization endpoint
+                // 需要认证的请求，重定向到login进行登录验证
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
                                 new LoginUrlAuthenticationEntryPoint("/login"),
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
                         )
                 )
-                // Accept access tokens for User Info and/or Client Registration
-                .oauth2ResourceServer((resourceServer) -> resourceServer
-                        .jwt(Customizer.withDefaults()));
+                // 使用jwt处理接收到的access_token
+                .oauth2ResourceServer((resourceServer) ->
+                        resourceServer.jwt(Customizer.withDefaults()));
+//                .with(authorizationServerConfigurer, (authorizationServer) -> authorizationServer
+//                        .tokenEndpoint(tokenEndpoint -> tokenEndpoint
+//                                .accessTokenRequestConverter(oAuth2PasswordAuthenticationConverter)
+//                                .authenticationProvider(oAuth2PasswordAuthenticationProvider)
+//                        ));
 
         return http.build();
     }
@@ -80,6 +119,8 @@ public class AuthorizationServerConfig {
                 .authorizeHttpRequests((authorize) -> authorize
                         .anyRequest().authenticated()
                 )
+                // Form login handles the redirect to the login page from the
+                // authorization server filter chain
                 .formLogin(Customizer.withDefaults());
 
         return http.build();
@@ -96,78 +137,51 @@ public class AuthorizationServerConfig {
      * http://127.0.0.1:8082/oauth2/authorize?client_id=oidc-client&response_type=code&scope=profile%20openid&redirect_uri=http://127.0.0.1:8080/login/oauth2/code/oidc-client
      *
      */
-//    @Bean
-//    public RegisteredClientRepository registeredClientRepository() {
-//        RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-//                .clientId("oidc-client")
-//                .clientSecret("{noop}secret")
-//                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-//                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-//                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-//                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-//                .redirectUri("http://127.0.0.1:8080/login/oauth2/code/oidc-client")
-////                .redirectUri("http://www.google.com")
-//                .postLogoutRedirectUri("http://127.0.0.1:8080/")
-//                .scope(OidcScopes.OPENID)
-//                .scope(OidcScopes.PROFILE)
-////                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false).build())
-//                .build();
-//
-//        return new InMemoryRegisteredClientRepository(oidcClient);
-//    }
-
-    /**
-     * 客户端信息 oauth2_registered_client
-     */
     @Bean
-    public RegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate) {
-        return new JdbcRegisteredClientRepository(jdbcTemplate);
-    }
+    public RedisRegisteredClientRepository registeredClientRepository(OAuth2RegisteredClientRepository registeredClientRepository) {
 
-//    @Bean
-//    public JdbcRegisteredClientRepository registeredClientRepository(JdbcTemplate jdbcTemplate) {
-//
-//        RegisteredClient oidcClient = RegisteredClient.withId(UUID.randomUUID().toString())
-//                .clientId("oidc-client")
-//                .clientSecret("secret")
-//                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-//                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-//                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-//                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+//        TokenSettings tokenSettings = TokenSettings.builder()
+//                // 访问令牌有效时间
+//                .accessTokenTimeToLive(Duration.ofSeconds(30))
+//                // 刷新令牌有效期
+//                .refreshTokenTimeToLive(Duration.ofDays(1))
+//                // accessToken 形式
+////                .accessTokenFormat(OAuth2TokenFormat.REFERENCE)
+//                .build();
+
+        RegisteredClient messagingClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("oidc-client")
+                .clientSecret("{noop}secret")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                // 新增密码模式
+//                .authorizationGrantType(ExtensionAuthorizationGrantType.PASSWORD)
 //                .redirectUri("http://127.0.0.1:8080/login/oauth2/code/oidc-client")
-//                .postLogoutRedirectUri("http://127.0.0.1:8080/")
-//                .scope(OidcScopes.OPENID)
-//                .scope(OidcScopes.PROFILE)
-//                .clientSettings(ClientSettings.builder().build())
-//                .build();
-
-//        RegisteredClient messagingClient = RegisteredClient.withId(UUID.randomUUID().toString())
-//                .clientId("messaging-client")
-//                .clientSecret("{noop}secret")
-//                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-//                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-//                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-//                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-//                .redirectUri("http://127.0.0.1:8080/login/oauth2/code/messaging-client-oidc")
 //                .redirectUri("http://127.0.0.1:8080/authorized")
-//                .postLogoutRedirectUri("http://127.0.0.1:8080/logged-out")
-//                .scope(OidcScopes.OPENID)
-//                .scope(OidcScopes.PROFILE)
-//                .scope("message.read")
-//                .scope("message.write")
-//                .scope("user.read")
-//                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
-//                .build();
-//
-//        RegisteredClient deviceClient = RegisteredClient.withId(UUID.randomUUID().toString())
-//                .clientId("device-messaging-client")
-//                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-//                .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
-//                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-//                .scope("message.read")
-//                .scope("message.write")
-//                .build();
-//
+                .redirectUri("https://www.baidu.com/")
+                .postLogoutRedirectUri("http://127.0.0.1:8080/")
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .scope("message.read")
+                .scope("message.write")
+                .scope("user.read")
+//                .tokenSettings(tokenSettings)
+                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+                .build();
+
+        RegisteredClient deviceClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("device-messaging-client")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .scope("message.read")
+                .scope("message.write")
+                .build();
+
+
+
 //        RegisteredClient tokenExchangeClient = RegisteredClient.withId(UUID.randomUUID().toString())
 //                .clientId("token-client")
 //                .clientSecret("{noop}token")
@@ -176,7 +190,7 @@ public class AuthorizationServerConfig {
 //                .scope("message.read")
 //                .scope("message.write")
 //                .build();
-//
+
 //        RegisteredClient mtlsDemoClient = RegisteredClient.withId(UUID.randomUUID().toString())
 //                .clientId("mtls-demo-client")
 //                .clientAuthenticationMethod(ClientAuthenticationMethod.TLS_CLIENT_AUTH)
@@ -197,43 +211,14 @@ public class AuthorizationServerConfig {
 //                )
 //                .build();
 
-//        JdbcRegisteredClientRepository registeredClientRepository = new JdbcRegisteredClientRepository(jdbcTemplate);
-//        registeredClientRepository.save(oidcClient);
-//        registeredClientRepository.save(messagingClient);
-//        registeredClientRepository.save(deviceClient);
-//        registeredClientRepository.save(tokenExchangeClient);
-//        registeredClientRepository.save(mtlsDemoClient);
+        // Save registered client's in db as if in-memory
+        RedisRegisteredClientRepository redisRegisteredClientRepository = new RedisRegisteredClientRepository(registeredClientRepository);
+        redisRegisteredClientRepository.save(messagingClient);
+        redisRegisteredClientRepository.save(deviceClient);
+//        redisRegisteredClientRepository.save(tokenExchangeClient);
+//        redisRegisteredClientRepository.save(mtlsDemoClient);
 
-//        return registeredClientRepository;
-//    }
-
-
-    /**
-     * 授权信息 oauth2_authorization
-     */
-    @Bean
-    public JdbcOAuth2AuthorizationService authorizationService(JdbcTemplate jdbcTemplate,
-                                                               RegisteredClientRepository registeredClientRepository) {
-        return new JdbcOAuth2AuthorizationService(jdbcTemplate, registeredClientRepository);
-    }
-
-    /**
-     * 授权确认 oauth2_authorization_consent
-     */
-    @Bean
-    public JdbcOAuth2AuthorizationConsentService authorizationConsentService(JdbcTemplate jdbcTemplate,
-                                                                             RegisteredClientRepository registeredClientRepository) {
-        // Will be used by the ConsentController
-        return new JdbcOAuth2AuthorizationConsentService(jdbcTemplate, registeredClientRepository);
-    }
-
-    @Bean
-    public UserDetailsService userDetailsService() {
-        UserDetails userDetails = User.withUsername("user")
-                .password("{noop}secret")
-                .roles("USER")
-                .build();
-        return new InMemoryUserDetailsManager(userDetails);
+        return redisRegisteredClientRepository;
     }
 
     @Bean

@@ -7,9 +7,9 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: your-ip-address
-        username: your-username
-        password: your-password
+        server-addr: 192.168.100.13:18848
+        username: nacos
+        password: Nacos@1131
   datasource:
     hikari:
       pool-name: AnthemHikariCP
@@ -21,14 +21,15 @@ spring:
       connection-timeout: 30000
     driver-class-name:  com.mysql.cj.jdbc.Driver
     type: com.zaxxer.hikari.HikariDataSource
-    url: jdbc:mysql://your-ip-address/schema?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=UTC
-    username: your-username
-    password: your-password
+    url: jdbc:mysql://192.168.100.11:13306/anthem?characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&serverTimezone=UTC
+    username: redPanda
+    password: RedPanda@1131
   data:
     redis:
-      host: your-ip-address
-      port: 6379
-      password: your-password
+      database: 0
+      host: 192.168.100.12
+      port: 16379
+      password: Redis@0131
       lettuce:
         pool:
           max-active: 50
@@ -36,11 +37,17 @@ spring:
           min-idle: 10
           max-wait: 5000ms
 
+
+
+
 #mybatis-plus配置
 mybatis-plus:
   mapper-locations: classpath:com/tempest/**/mapper/*Mapper.xml
   #实体扫描，多个package用逗号或者分号分隔
   typeAliasesPackage: com.tempest.**.entity
+  configuration:
+   map-underscore-to-camel-case: true
+   log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 logging:
   level:

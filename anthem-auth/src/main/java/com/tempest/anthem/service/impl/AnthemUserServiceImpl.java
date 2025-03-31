@@ -1,11 +1,14 @@
 package com.tempest.anthem.service.impl;
 
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.tempest.anthem.entity.AnthemUser;
 import com.tempest.anthem.mapper.AnthemUserMapper;
 import com.tempest.anthem.service.IAnthemUserService;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * <p>
@@ -20,6 +23,7 @@ public class AnthemUserServiceImpl extends ServiceImpl<AnthemUserMapper, AnthemU
 
     @Override
     public AnthemUser selectByUsername(String username) {
-        return this.getOne(lambdaQuery().eq(AnthemUser::getAccount, username).or().eq(AnthemUser::getNickName, username));
+        AnthemUser anthemUser = lambdaQuery().eq(AnthemUser::getAccount, username).or().eq(AnthemUser::getNickName, username).one();
+        return anthemUser;
     }
 }

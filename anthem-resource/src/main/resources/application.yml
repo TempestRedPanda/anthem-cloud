@@ -12,9 +12,9 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: your-ip-address
-        username: your-username
-        password: your-password
+        server-addr: 192.168.100.13:18848
+        username: nacos
+        password: Nacos@1131
 
 
 logging:

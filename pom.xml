@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.2</version>
+        <version>3.4.4</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
 
@@ -40,9 +40,9 @@
         <anthem.project.version>1.0.0</anthem.project.version>
         <maven.plugin.version>3.11.0</maven.plugin.version>
         <spring.boot.version>3.3.2</spring.boot.version>
-        <spring-cloud.version>2023.0.3</spring-cloud.version>
-        <spring-cloud-alibaba.version>2023.0.1.2</spring-cloud-alibaba.version>
-        <java.version>17</java.version>
+        <spring-cloud.version>2024.0.1</spring-cloud.version>
+        <spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
+        <java.version>21</java.version>
     </properties>
 
     <dependencyManagement>

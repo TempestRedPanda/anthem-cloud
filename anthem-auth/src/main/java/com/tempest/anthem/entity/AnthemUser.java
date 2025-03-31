@@ -1,6 +1,7 @@
 package com.tempest.anthem.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 
@@ -146,18 +147,18 @@ public class AnthemUser implements Serializable {
     @Override
     public String toString() {
         return "AnthemUser{" +
-        "id = " + id +
-        ", code = " + code +
-        ", account = " + account +
-        ", nickName = " + nickName +
-        ", realName = " + realName +
-        ", password = " + password +
-        ", email = " + email +
-        ", phone = " + phone +
-        ", address = " + address +
-        ", createTime = " + createTime +
-        ", updateTime = " + updateTime +
-        ", openId = " + openId +
-        "}";
+                "id = " + id +
+                ", code = " + code +
+                ", account = " + account +
+                ", nickName = " + nickName +
+                ", realName = " + realName +
+                ", password = " + password +
+                ", email = " + email +
+                ", phone = " + phone +
+                ", address = " + address +
+                ", createTime = " + createTime +
+                ", updateTime = " + updateTime +
+                ", openId = " + openId +
+                "}";
     }
 }

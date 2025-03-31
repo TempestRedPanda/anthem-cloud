@@ -2,11 +2,11 @@
 
 **Anthem Cloud** is a personal learning scaffold designed to help you explore and understand microservices architecture using the following technologies:
 
-- **Spring Cloud**: 2023.0.3
-- **Spring Cloud Alibaba**: 2023.0.1.2
-- **Nacos**: 2.4.0
-- **JDK**: 17
-- **Spring Security OAuth2 Authorization Server**: 1.3.1
+- **Spring Cloud**: 2024.0.1
+- **Spring Cloud Alibaba**: 2023.0.3.2
+- **Nacos**: 2.5.1
+- **JDK**: 21
+- **Spring Security OAuth2 Authorization Server**: 1.4.2
 
 ## Purpose
 
@@ -44,11 +44,11 @@ This project is licensed under the MIT License. See the `LICENSE` file for detai
 
 **Anthem Cloud** 是一个个人学习用的脚手架，旨在帮助您通过以下技术探索和理解微服务架构：
 
-- **Spring Cloud**: 2023.0.3
-- **Spring Cloud Alibaba**: 2023.0.1.2
-- **Nacos**: 2.4.0
-- **JDK**: 17
-- **Spring Security OAuth2 授权服务器**: 1.3.1
+- **Spring Cloud**: 2024.0.1
+- **Spring Cloud Alibaba**: 2023.0.3.2
+- **Nacos**: 2.5.1
+- **JDK**: 21
+- **Spring Security OAuth2 Authorization Server**: 1.4.2
 
 ## 目的
 
