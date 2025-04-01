@@ -8,6 +8,7 @@ import com.nimbusds.jose.proc.SecurityContext;
 //import com.tempest.anthem.granter.ExtensionAuthorizationGrantType;
 //import com.tempest.anthem.granter.password.OAuth2PasswordAuthenticationConverter;
 //import com.tempest.anthem.granter.password.OAuth2PasswordAuthenticationProvider;
+import com.tempest.anthem.federation.FederatedIdentityIdTokenCustomizer;
 import com.tempest.anthem.redis.repository.OAuth2AuthorizationGrantAuthorizationRepository;
 import com.tempest.anthem.redis.repository.OAuth2RegisteredClientRepository;
 import com.tempest.anthem.redis.repository.OAuth2UserConsentRepository;
@@ -43,6 +44,8 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
+import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
+import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
@@ -133,52 +136,55 @@ public class AuthorizationServerConfig {
      * http://localhost:8082/.well-known/openid-configuration
      *
      * 获取授权码
-     * http://localhost:8082/oauth2/authorize?response_type=code&client_id=oidc-client&scope=profile openid&redirect_uri=http://www.google.com
-     * http://127.0.0.1:8082/oauth2/authorize?client_id=oidc-client&response_type=code&scope=profile%20openid&redirect_uri=http://127.0.0.1:8080/login/oauth2/code/oidc-client
+     * http://localhost:8081/oauth2/authorize?response_type=code&client_id=oidc-client&scope=openid&state=some-state&redirect_uri=http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc
+     * http://127.0.0.1:8081/oauth2/authorize?response_type=code&client_id=messaging-client&scope=openid&redirect_uri=http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc
+     *
      *
      */
     @Bean
     public RedisRegisteredClientRepository registeredClientRepository(OAuth2RegisteredClientRepository registeredClientRepository) {
 
-//        TokenSettings tokenSettings = TokenSettings.builder()
-//                // 访问令牌有效时间
-//                .accessTokenTimeToLive(Duration.ofSeconds(30))
-//                // 刷新令牌有效期
-//                .refreshTokenTimeToLive(Duration.ofDays(1))
-//                // accessToken 形式
-////                .accessTokenFormat(OAuth2TokenFormat.REFERENCE)
-//                .build();
-
+        TokenSettings tokenSettings = TokenSettings.builder()
+                // 访问令牌有效时间
+                .accessTokenTimeToLive(Duration.ofSeconds(30))
+                // 刷新令牌有效期
+                .refreshTokenTimeToLive(Duration.ofDays(1))
+                // accessToken 形式
+//                .accessTokenFormat(OAuth2TokenFormat.REFERENCE)
+                .build();
         RegisteredClient messagingClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("oidc-client")
-                .clientSecret("{noop}secret")
+                .clientId("messaging-client")
+                .clientSecret(passwordEncoder().encode("secret"))
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_JWT)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 // 新增密码模式
 //                .authorizationGrantType(ExtensionAuthorizationGrantType.PASSWORD)
 //                .redirectUri("http://127.0.0.1:8080/login/oauth2/code/oidc-client")
-//                .redirectUri("http://127.0.0.1:8080/authorized")
-                .redirectUri("https://www.baidu.com/")
-                .postLogoutRedirectUri("http://127.0.0.1:8080/")
+//                .redirectUri("https://www.baidu.com")
+                .redirectUri("http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc")
+                .redirectUri("http://127.0.0.1:8081/authorized")
+                .postLogoutRedirectUri("http://127.0.0.1:8081/logged-out")
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope("message.read")
                 .scope("message.write")
                 .scope("user.read")
-//                .tokenSettings(tokenSettings)
+                .tokenSettings(tokenSettings)
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
                 .build();
 
-        RegisteredClient deviceClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("device-messaging-client")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-                .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .scope("message.read")
-                .scope("message.write")
-                .build();
+//        RegisteredClient deviceClient = RegisteredClient.withId(UUID.randomUUID().toString())
+//                .clientId("device-messaging-client")
+//                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+//                .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
+//                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+//                .scope("message.read")
+//                .scope("message.write")
+//                .build();
 
 
 
@@ -214,11 +220,16 @@ public class AuthorizationServerConfig {
         // Save registered client's in db as if in-memory
         RedisRegisteredClientRepository redisRegisteredClientRepository = new RedisRegisteredClientRepository(registeredClientRepository);
         redisRegisteredClientRepository.save(messagingClient);
-        redisRegisteredClientRepository.save(deviceClient);
+//        redisRegisteredClientRepository.save(deviceClient);
 //        redisRegisteredClientRepository.save(tokenExchangeClient);
 //        redisRegisteredClientRepository.save(mtlsDemoClient);
 
         return redisRegisteredClientRepository;
+    }
+
+    @Bean
+    public OAuth2TokenCustomizer<JwtEncodingContext> idTokenCustomizer() {
+        return new FederatedIdentityIdTokenCustomizer();
     }
 
     @Bean
