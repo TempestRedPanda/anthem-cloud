@@ -17,14 +17,8 @@ package com.tempest.anthem.redis.service;
 
 import java.security.Principal;
 
-import com.tempest.anthem.redis.entity.OAuth2AuthorizationCodeGrantAuthorization;
-import com.tempest.anthem.redis.entity.OAuth2AuthorizationGrantAuthorization;
-import com.tempest.anthem.redis.entity.OAuth2ClientCredentialsGrantAuthorization;
-import com.tempest.anthem.redis.entity.OAuth2DeviceCodeGrantAuthorization;
-import com.tempest.anthem.redis.entity.OAuth2RegisteredClient;
-import com.tempest.anthem.redis.entity.OAuth2TokenExchangeGrantAuthorization;
-import com.tempest.anthem.redis.entity.OAuth2UserConsent;
-import com.tempest.anthem.redis.entity.OidcAuthorizationCodeGrantAuthorization;
+import com.tempest.anthem.granter.ExtensionAuthorizationGrantType;
+import com.tempest.anthem.redis.entity.*;
 
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
@@ -99,8 +93,24 @@ final class ModelMapper {
 		}
 		else if (AuthorizationGrantType.TOKEN_EXCHANGE.equals(authorization.getAuthorizationGrantType())) {
 			return convertOAuth2TokenExchangeGrantAuthorization(authorization);
+		} else if (ExtensionAuthorizationGrantType.PASSWORD.equals(authorization.getAuthorizationGrantType())){
+			return convertPasswordAuthorizationCodeGrantAuthorization(authorization);
 		}
 		return null;
+	}
+
+	/**
+	 * 转换密码模式授权
+	 *
+	 * @param authorization 授权信息
+	 * @return OAuth2AuthorizationGrantAuthorization OAuth2授权
+	 */
+	private static OAuth2AuthorizationGrantAuthorization convertPasswordAuthorizationCodeGrantAuthorization(
+			OAuth2Authorization authorization) {
+		OAuth2AuthorizationGrantAuthorization.AccessToken accessToken = extractAccessToken(authorization);
+		OAuth2AuthorizationGrantAuthorization.RefreshToken refreshToken = extractRefreshToken(authorization);
+		return new OAuth2PasswordGrantAuthorization(authorization.getId(), authorization.getRegisteredClientId(),
+				authorization.getPrincipalName(), authorization.getAuthorizedScopes(), accessToken, refreshToken);
 	}
 
 	static OidcAuthorizationCodeGrantAuthorization convertOidcAuthorizationCodeGrantAuthorization(

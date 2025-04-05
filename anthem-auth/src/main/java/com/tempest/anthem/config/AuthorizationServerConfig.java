@@ -5,15 +5,11 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
-//import com.tempest.anthem.granter.ExtensionAuthorizationGrantType;
-//import com.tempest.anthem.granter.password.OAuth2PasswordAuthenticationConverter;
-//import com.tempest.anthem.granter.password.OAuth2PasswordAuthenticationProvider;
 import com.tempest.anthem.federation.FederatedIdentityIdTokenCustomizer;
-import com.tempest.anthem.redis.repository.OAuth2AuthorizationGrantAuthorizationRepository;
+import com.tempest.anthem.granter.ExtensionAuthorizationGrantType;
+import com.tempest.anthem.granter.password.OAuth2PasswordAuthenticationConverter;
+import com.tempest.anthem.granter.password.OAuth2PasswordAuthenticationProvider;
 import com.tempest.anthem.redis.repository.OAuth2RegisteredClientRepository;
-import com.tempest.anthem.redis.repository.OAuth2UserConsentRepository;
-import com.tempest.anthem.redis.service.RedisOAuth2AuthorizationConsentService;
-import com.tempest.anthem.redis.service.RedisOAuth2AuthorizationService;
 import com.tempest.anthem.redis.service.RedisRegisteredClientRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -21,32 +17,26 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
-import org.springframework.security.oauth2.core.OAuth2AccessToken;
+import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
-import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
-import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
-import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.oauth2.server.authorization.token.*;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -64,17 +54,17 @@ public class AuthorizationServerConfig {
 
     private static final String CUSTOM_CONSENT_PAGE_URI = "/oauth2/consent";
 
-//    // 扩展Provider
-//    private final OAuth2PasswordAuthenticationProvider oAuth2PasswordAuthenticationProvider;
-//    // 扩展Converter
-//    private final OAuth2PasswordAuthenticationConverter oAuth2PasswordAuthenticationConverter;
+    // 扩展Provider
+    private final OAuth2PasswordAuthenticationProvider oAuth2PasswordAuthenticationProvider;
+    // 扩展Converter
+    private final OAuth2PasswordAuthenticationConverter oAuth2PasswordAuthenticationConverter;
 
-//    @Autowired
-//    public AuthorizationServerConfig(@Lazy OAuth2PasswordAuthenticationProvider oAuth2PasswordAuthenticationProvider,
-//                                     @Lazy OAuth2PasswordAuthenticationConverter oAuth2PasswordAuthenticationConverter) {
-//        this.oAuth2PasswordAuthenticationProvider = oAuth2PasswordAuthenticationProvider;
-//        this.oAuth2PasswordAuthenticationConverter = oAuth2PasswordAuthenticationConverter;
-//    }
+    @Autowired
+    public AuthorizationServerConfig(@Lazy OAuth2PasswordAuthenticationProvider oAuth2PasswordAuthenticationProvider,
+                                     @Lazy OAuth2PasswordAuthenticationConverter oAuth2PasswordAuthenticationConverter) {
+        this.oAuth2PasswordAuthenticationProvider = oAuth2PasswordAuthenticationProvider;
+        this.oAuth2PasswordAuthenticationConverter = oAuth2PasswordAuthenticationConverter;
+    }
 
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -87,7 +77,7 @@ public class AuthorizationServerConfig {
                 .securityMatcher(authorizationServerConfigurer.getEndpointsMatcher())
                 .with(authorizationServerConfigurer, (authorizationServer) ->
                         authorizationServer
-                                .oidc(Customizer.withDefaults())	// Enable OpenID Connect 1.0
+                                .oidc(Customizer.withDefaults())    // Enable OpenID Connect 1.0
                 )
                 .authorizeHttpRequests((authorize) ->
                         authorize
@@ -104,12 +94,12 @@ public class AuthorizationServerConfig {
                 )
                 // 使用jwt处理接收到的access_token
                 .oauth2ResourceServer((resourceServer) ->
-                        resourceServer.jwt(Customizer.withDefaults()));
-//                .with(authorizationServerConfigurer, (authorizationServer) -> authorizationServer
-//                        .tokenEndpoint(tokenEndpoint -> tokenEndpoint
-//                                .accessTokenRequestConverter(oAuth2PasswordAuthenticationConverter)
-//                                .authenticationProvider(oAuth2PasswordAuthenticationProvider)
-//                        ));
+                        resourceServer.jwt(Customizer.withDefaults()))
+                .with(authorizationServerConfigurer, (authorizationServer) -> authorizationServer
+                        .tokenEndpoint(tokenEndpoint -> tokenEndpoint
+                                .accessTokenRequestConverter(oAuth2PasswordAuthenticationConverter)
+                                .authenticationProvider(oAuth2PasswordAuthenticationProvider)
+                        ));
 
         return http.build();
     }
@@ -131,22 +121,20 @@ public class AuthorizationServerConfig {
 
     /**
      * 注册客户端信息
-     *
+     * <p>
      * 查询认证服务器信息
      * http://localhost:8082/.well-known/openid-configuration
-     *
+     * <p>
      * 获取授权码
      * http://localhost:8081/oauth2/authorize?response_type=code&client_id=oidc-client&scope=openid&state=some-state&redirect_uri=http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc
      * http://127.0.0.1:8081/oauth2/authorize?response_type=code&client_id=messaging-client&scope=openid&redirect_uri=http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc
-     *
-     *
      */
     @Bean
     public RedisRegisteredClientRepository registeredClientRepository(OAuth2RegisteredClientRepository registeredClientRepository) {
 
         TokenSettings tokenSettings = TokenSettings.builder()
                 // 访问令牌有效时间
-                .accessTokenTimeToLive(Duration.ofSeconds(30))
+                .accessTokenTimeToLive(Duration.ofMinutes(30))
                 // 刷新令牌有效期
                 .refreshTokenTimeToLive(Duration.ofDays(1))
                 // accessToken 形式
@@ -162,9 +150,7 @@ public class AuthorizationServerConfig {
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 // 新增密码模式
-//                .authorizationGrantType(ExtensionAuthorizationGrantType.PASSWORD)
-//                .redirectUri("http://127.0.0.1:8080/login/oauth2/code/oidc-client")
-//                .redirectUri("https://www.baidu.com")
+                .authorizationGrantType(ExtensionAuthorizationGrantType.PASSWORD)
                 .redirectUri("http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc")
                 .redirectUri("http://127.0.0.1:8081/authorized")
                 .postLogoutRedirectUri("http://127.0.0.1:8081/logged-out")
@@ -185,7 +171,6 @@ public class AuthorizationServerConfig {
 //                .scope("message.read")
 //                .scope("message.write")
 //                .build();
-
 
 
 //        RegisteredClient tokenExchangeClient = RegisteredClient.withId(UUID.randomUUID().toString())
@@ -228,6 +213,21 @@ public class AuthorizationServerConfig {
     }
 
     @Bean
+    public JwtEncoder jwtEncoder(JWKSource<SecurityContext> jwkSource) {
+        return new NimbusJwtEncoder(jwkSource);
+    }
+
+    @Bean
+    public OAuth2TokenGenerator<? extends OAuth2Token> tokenGenerator(JwtEncoder jwtEncoder) {
+        // JWT 生成器
+        JwtGenerator jwtGenerator = new JwtGenerator(jwtEncoder);
+        // 刷新令牌生成器
+        OAuth2RefreshTokenGenerator refreshTokenGenerator = new OAuth2RefreshTokenGenerator();
+        // 组合生成器
+        return new DelegatingOAuth2TokenGenerator(jwtGenerator, refreshTokenGenerator);
+    }
+
+    @Bean
     public OAuth2TokenCustomizer<JwtEncodingContext> idTokenCustomizer() {
         return new FederatedIdentityIdTokenCustomizer();
     }
@@ -251,8 +251,7 @@ public class AuthorizationServerConfig {
             KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
             keyPairGenerator.initialize(2048);
             keyPair = keyPairGenerator.generateKeyPair();
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
             throw new IllegalStateException(ex);
         }
         return keyPair;
