@@ -15,10 +15,7 @@
  */
 package com.tempest.anthem.redis.repository;
 
-import com.tempest.anthem.redis.entity.OAuth2AuthorizationCodeGrantAuthorization;
-import com.tempest.anthem.redis.entity.OAuth2AuthorizationGrantAuthorization;
-import com.tempest.anthem.redis.entity.OAuth2DeviceCodeGrantAuthorization;
-import com.tempest.anthem.redis.entity.OidcAuthorizationCodeGrantAuthorization;
+import com.tempest.anthem.redis.entity.*;
 
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
@@ -44,6 +41,8 @@ public interface OAuth2AuthorizationGrantAuthorizationRepository
 	<T extends OAuth2DeviceCodeGrantAuthorization> T findByDeviceState(String deviceState);
 
 	<T extends OAuth2DeviceCodeGrantAuthorization> T findByDeviceCode_TokenValue(String deviceCode);
+
+	<T extends OAuth2PasswordGrantAuthorization> T findByPassword_TokenValue(String password);
 
 	<T extends OAuth2DeviceCodeGrantAuthorization> T findByUserCode_TokenValue(String userCode);
 

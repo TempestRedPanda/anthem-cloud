@@ -21,6 +21,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -33,8 +34,10 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
+import org.springframework.security.oauth2.server.authorization.context.AuthorizationServerContextHolder;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.OAuth2TokenFormat;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.oauth2.server.authorization.token.*;
 import org.springframework.security.web.SecurityFilterChain;
@@ -43,6 +46,7 @@ import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.Principal;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
@@ -51,8 +55,6 @@ import java.util.UUID;
 @Configuration
 @EnableWebSecurity
 public class AuthorizationServerConfig {
-
-    private static final String CUSTOM_CONSENT_PAGE_URI = "/oauth2/consent";
 
     // 扩展Provider
     private final OAuth2PasswordAuthenticationProvider oAuth2PasswordAuthenticationProvider;
@@ -77,7 +79,12 @@ public class AuthorizationServerConfig {
                 .securityMatcher(authorizationServerConfigurer.getEndpointsMatcher())
                 .with(authorizationServerConfigurer, (authorizationServer) ->
                         authorizationServer
-                                .oidc(Customizer.withDefaults())    // Enable OpenID Connect 1.0
+                                // Enable OpenID Connect 1.0
+                                .oidc(Customizer.withDefaults())
+                                .tokenEndpoint(tokenEndpoint ->
+                                        tokenEndpoint
+                                                .accessTokenRequestConverter(oAuth2PasswordAuthenticationConverter)
+                                                .authenticationProvider(oAuth2PasswordAuthenticationProvider))
                 )
                 .authorizeHttpRequests((authorize) ->
                         authorize
@@ -94,12 +101,7 @@ public class AuthorizationServerConfig {
                 )
                 // 使用jwt处理接收到的access_token
                 .oauth2ResourceServer((resourceServer) ->
-                        resourceServer.jwt(Customizer.withDefaults()))
-                .with(authorizationServerConfigurer, (authorizationServer) -> authorizationServer
-                        .tokenEndpoint(tokenEndpoint -> tokenEndpoint
-                                .accessTokenRequestConverter(oAuth2PasswordAuthenticationConverter)
-                                .authenticationProvider(oAuth2PasswordAuthenticationProvider)
-                        ));
+                        resourceServer.jwt(Customizer.withDefaults()));
 
         return http.build();
     }
@@ -126,7 +128,7 @@ public class AuthorizationServerConfig {
      * http://localhost:8082/.well-known/openid-configuration
      * <p>
      * 获取授权码
-     * http://localhost:8081/oauth2/authorize?response_type=code&client_id=oidc-client&scope=openid&state=some-state&redirect_uri=http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc
+     * http://localhost:8081/oauth2/authorize?response_type=code&client_id=messaging-client&scope=openid&state=some-state&redirect_uri=http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc
      * http://127.0.0.1:8081/oauth2/authorize?response_type=code&client_id=messaging-client&scope=openid&redirect_uri=http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc
      */
     @Bean
@@ -138,9 +140,9 @@ public class AuthorizationServerConfig {
                 // 刷新令牌有效期
                 .refreshTokenTimeToLive(Duration.ofDays(1))
                 // accessToken 形式
-//                .accessTokenFormat(OAuth2TokenFormat.REFERENCE)
+                .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                 .build();
-        RegisteredClient messagingClient = RegisteredClient.withId(UUID.randomUUID().toString())
+        RegisteredClient messagingClient = RegisteredClient.withId("messaging-client")
                 .clientId("messaging-client")
                 .clientSecret(passwordEncoder().encode("secret"))
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
@@ -149,8 +151,6 @@ public class AuthorizationServerConfig {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-                // 新增密码模式
-                .authorizationGrantType(ExtensionAuthorizationGrantType.PASSWORD)
                 .redirectUri("http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc")
                 .redirectUri("http://127.0.0.1:8081/authorized")
                 .postLogoutRedirectUri("http://127.0.0.1:8081/logged-out")
@@ -163,51 +163,68 @@ public class AuthorizationServerConfig {
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
                 .build();
 
-//        RegisteredClient deviceClient = RegisteredClient.withId(UUID.randomUUID().toString())
-//                .clientId("device-messaging-client")
-//                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-//                .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
-//                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-//                .scope("message.read")
-//                .scope("message.write")
-//                .build();
+        // 密码模式
+        RegisteredClient passwordClient = RegisteredClient.withId("password-client")
+                .clientId("password-client")
+                .clientSecret(passwordEncoder().encode("secret"))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .authorizationGrantType(ExtensionAuthorizationGrantType.PASSWORD)
+                .redirectUri("http://127.0.0.1:8081/login/oauth2/code/messaging-client-oidc")
+                .redirectUri("http://127.0.0.1:8081/authorized")
+                .postLogoutRedirectUri("http://127.0.0.1:8081/logged-out")
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .tokenSettings(tokenSettings)
+                .clientSettings(ClientSettings.builder().requireAuthorizationConsent(true).build())
+                .build();
+
+        RegisteredClient deviceClient = RegisteredClient.withId("device-messaging-client")
+                .clientId("device-messaging-client")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                .authorizationGrantType(AuthorizationGrantType.DEVICE_CODE)
+                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                .scope("message.read")
+                .scope("message.write")
+                .build();
 
 
-//        RegisteredClient tokenExchangeClient = RegisteredClient.withId(UUID.randomUUID().toString())
-//                .clientId("token-client")
-//                .clientSecret("{noop}token")
-//                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-//                .authorizationGrantType(new AuthorizationGrantType("urn:ietf:params:oauth:grant-type:token-exchange"))
-//                .scope("message.read")
-//                .scope("message.write")
-//                .build();
+        RegisteredClient tokenExchangeClient = RegisteredClient.withId("token-client")
+                .clientId("token-client")
+                .clientSecret("{noop}token")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(new AuthorizationGrantType("urn:ietf:params:oauth:grant-type:token-exchange"))
+                .scope("message.read")
+                .scope("message.write")
+                .build();
 
-//        RegisteredClient mtlsDemoClient = RegisteredClient.withId(UUID.randomUUID().toString())
-//                .clientId("mtls-demo-client")
-//                .clientAuthenticationMethod(ClientAuthenticationMethod.TLS_CLIENT_AUTH)
-//                .clientAuthenticationMethod(ClientAuthenticationMethod.SELF_SIGNED_TLS_CLIENT_AUTH)
-//                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-//                .scope("message.read")
-//                .scope("message.write")
-//                .clientSettings(
-//                        ClientSettings.builder()
-//                                .x509CertificateSubjectDN("CN=demo-client-sample,OU=Spring Samples,O=Spring,C=US")
-//                                .jwkSetUrl("http://127.0.0.1:8080/jwks")
-//                                .build()
-//                )
-//                .tokenSettings(
-//                        TokenSettings.builder()
-//                                .x509CertificateBoundAccessTokens(true)
-//                                .build()
-//                )
-//                .build();
+        RegisteredClient mtlsDemoClient = RegisteredClient.withId("mtls-demo-client")
+                .clientId("mtls-demo-client")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.TLS_CLIENT_AUTH)
+                .clientAuthenticationMethod(ClientAuthenticationMethod.SELF_SIGNED_TLS_CLIENT_AUTH)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("message.read")
+                .scope("message.write")
+                .clientSettings(
+                        ClientSettings.builder()
+                                .x509CertificateSubjectDN("CN=demo-client-sample,OU=Spring Samples,O=Spring,C=US")
+                                .jwkSetUrl("http://127.0.0.1:8080/jwks")
+                                .build()
+                )
+                .tokenSettings(
+                        TokenSettings.builder()
+                                .x509CertificateBoundAccessTokens(true)
+                                .build()
+                )
+                .build();
 
         // Save registered client's in db as if in-memory
         RedisRegisteredClientRepository redisRegisteredClientRepository = new RedisRegisteredClientRepository(registeredClientRepository);
         redisRegisteredClientRepository.save(messagingClient);
-//        redisRegisteredClientRepository.save(deviceClient);
-//        redisRegisteredClientRepository.save(tokenExchangeClient);
-//        redisRegisteredClientRepository.save(mtlsDemoClient);
+        redisRegisteredClientRepository.save(passwordClient);
+        redisRegisteredClientRepository.save(deviceClient);
+        redisRegisteredClientRepository.save(tokenExchangeClient);
+        redisRegisteredClientRepository.save(mtlsDemoClient);
 
         return redisRegisteredClientRepository;
     }

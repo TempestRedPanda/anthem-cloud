@@ -21,7 +21,6 @@ public class WebSecurityConfig {
                         .jwt(Customizer.withDefaults())
                 )
                 .oauth2Login(Customizer.withDefaults());
-//                .oauth2Client(Customizer.withDefaults());
         // @formatter:on
         http.csrf(ServerHttpSecurity.CsrfSpec::disable);
         http.cors(ServerHttpSecurity.CorsSpec::disable);

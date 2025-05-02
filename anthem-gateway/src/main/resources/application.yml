@@ -19,14 +19,16 @@ spring:
         locator:
           enabled: true
       routes:
-#        - id: anthem-auth
-#          uri: lb://anthem-auth
-#          predicates:
-#            - Path=/auth/**
+        - id: anthem-auth
+          uri: lb://anthem-auth
+          predicates:
+            - Path=/auth/**
         - id: anthem-resource
           uri: lb://anthem-resource
           predicates:
-            - Path=/aaa/**
+            - Path=/resource-server/**
+          filters:
+            - StripPrefix=1
   security:
     oauth2:
       resourceserver:

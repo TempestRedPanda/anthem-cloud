@@ -37,8 +37,10 @@ public class OAuth2PasswordAuthenticationConverter implements AuthenticationConv
 
         Map<String, Object> additionalParameters = new HashMap<>();
         parameters.forEach((key, value) -> {
-            if (!key.equals(OAuth2ParameterNames.GRANT_TYPE) && !key.equals(OAuth2ParameterNames.CLIENT_ID)
-                    && !key.equals(OAuth2ParameterNames.USERNAME) && !key.equals(OAuth2ParameterNames.PASSWORD)) {
+            if (!key.equals(OAuth2ParameterNames.GRANT_TYPE) &&
+                    !key.equals(OAuth2ParameterNames.CLIENT_ID) &&
+                    !key.equals(OAuth2ParameterNames.USERNAME) &&
+                    !key.equals(OAuth2ParameterNames.PASSWORD)) {
                 additionalParameters.put(key, value.getFirst());
             }
         });

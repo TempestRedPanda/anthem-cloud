@@ -118,6 +118,10 @@ public class RedisOAuth2AuthorizationService implements OAuth2AuthorizationServi
 			authorizationGrantAuthorization = this.authorizationGrantAuthorizationRepository
 				.findByDeviceCode_TokenValue(token);
 		}
+		else if (OAuth2ParameterNames.PASSWORD.equals(tokenType.getValue())) {
+			authorizationGrantAuthorization = this.authorizationGrantAuthorizationRepository
+					.findByPassword_TokenValue(token);
+		}
 		return authorizationGrantAuthorization != null ? toOAuth2Authorization(authorizationGrantAuthorization) : null;
 	}
 
